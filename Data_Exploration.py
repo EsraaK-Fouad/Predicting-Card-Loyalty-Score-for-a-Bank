@@ -225,5 +225,238 @@ class Explore_Data:
         
             
     
+# =====================================================================================================
+'''                                     Libraries ^_^                                                 '''
+#========================================================================================================
+
+import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
+import missingno as msno
+import seaborn as sns
+from scipy import stats
+import statsmodels.api as sm
+from scipy.stats import norm
+
+class Explore_Data:
+
+    def __init__(self, dataframe):
+        self.dataframe = dataframe
+        self.features_high_corr = 0
+
+    #------------------------ Information ^_^ ---------------------------------
+    def summary(self):
+        """
+        Print DataFrame info and return a summary of the DataFrame.
+        """
+        print(self.dataframe.info())
+        return self.dataframe.describe(include='all')
+
+    def count_zeros(self, column):
+        """
+        Count the number of zeros in a column.
+        """
+        count = (column == 0).sum()
+        return count
+
+    #------------------------------- Check null values ^_^ ------------------------------------
+    def null_values(self, plot=True, count_zero_values=True):
+        """
+        Count null values in each column, calculate the percentage of nulls in each column, and return a DataFrame.
+        If plot is True, it also displays null value visualizations.
+        If count_zero_values is True, it also counts zero values and calculates the total percentage.
+        """
+        null_val = pd.DataFrame(self.dataframe.isnull().sum())
+        null_val.columns = ['null_val']
+        null_val['percent_null'] = round(null_val['null_val'] / len(self.dataframe.index), 5) * 100
+        null_val = null_val.sort values('null_val', ascending=False)
+
+        if plot:
+            ax = sns.heatmap(self.dataframe.isnull(), cbar=False)
+            msno.heatmap(self.dataframe)
+            msno.dendrogram(self.dataframe)
+            msno.bar(self.dataframe)
+            plt.show()
+
+        if count_zero_values:
+            null_val['zero_value'] = self.dataframe.apply(self.count_zeros)
+            null_val['total_percent'] = round((null_val['null_val'] + null_val['zero_value']) / len(self.dataframe.index), 5) * 100
+
+        return null_val
+
+    #------------------------------- Check constant features ^_^------------------------------------
+    def constant_columns(self):
+        """
+        Find and return columns that contain only one value across all samples.
+        """
+        constant_columns = [[col, self.dataframe[col].value_counts()] for col in self.dataframe.columns if (self.dataframe[col].nunique()) == 1]
+        return constant_columns
+
+    #-------------------------------- Check the redundant features ^_^----------------------------------
+    def redundant_features(self):
+        """
+        Check for high correlation between features.
+        If the correlation between any two features is greater than 0.95, add them to a list and return the correlation matrix.
+        """
+        cor_matrix = self.dataframe.corr().abs()
+        upper_tri = pd.DataFrame(cor_matrix.where(np.triu(np.ones(cor_matrix.shape), k=1).astype(bool))
+        self.features_high_corr = [column for column in upper_tri.columns if any(upper_tri[column] > 0.95)]
+        if len(self.features_high_corr) == 0:
+            print("There are no redundant features")
+            print("*" * 50)
+            self.features_high_corr = "empty"
+            return upper_tri
+        else:
+            print(self.features_high_corr)
+            return upper_tri
+
+    #--------------------------------------- Cardinality ^_^---------------------------------------
+    def cardinality(self):
+        """
+        Calculate unique values in each column and return a DataFrame consisting of counts and percentages.
+        This helps in finding columns with high cardinality.
+        """
+        unique_val = pd.DataFrame(np.array([len(self.dataframe[col].unique()) for col in self.dataframe.columns]), index=self.dataframe.columns)
+        unique_val.columns = ['unique_val']
+        unique_val['percent_'] = round(unique_val['unique_val'] / len(self.dataframe.index), 2) * 100
+        unique_val = unique_val.sort values('percent_', ascending=False)
+        return unique_val
+
+    #------------------------------- Check duplication ^_^------------------------------------
+    def duplicated_values(self):
+        """
+        Count duplicated rows in the DataFrame.
+        """
+        return print("Number of duplicated rows", self.dataframe.duplicated().sum())
+
+    #--------------------------------------- Drop columns ^_^---------------------------------------
+    def drop_col(self):
+        """
+        Drop specified columns and features with high correlation.
+        """
+        self.dataframe = self.dataframe.drop(self.features_high_corr + ['Id'], axis=1, inplace=True)
+        return self.dataframe
+
+    #--------------------------------------- Count of each category ^_^---------------------------------------
+    def imbalance(self, col):
+        """
+        Print the count of each category in a column as a percentage and visualize the differences in counts.
+        """
+        print(self.dataframe[col].value_counts(normalize=True))
+        self.dataframe[col].value_counts().plot(kind='bar')
+        plt.show()
+        print()
+  
+
+    #--------------------------------------- Plotting Object  Features ^_^---------------------------------------
+    
+    def plot_object_features(self, col_excluded):
+        """
+        Plot the count of each category in object features and exclude specified columns.
+        """
+        object_features = self.dataframe.describe(include='object').columns
+        features_to_plot = list(set(object_features) - set(col_excluded))
+        for index in range(len(features_to_plot):
+            self.imbalance(features_to_plot[index])
+   
+
+    #--------------------------------------- Detect Outliers ^_^---------------------------------------
+
+    def detect_outlier(self, col):
+        """
+        Detect outliers in a column using the IQR method.
+        """
+        Q1 = self.dataframe[col].quantile(0.25)
+        Q3 = self.dataframe[col].quantile(0.75)
+        IQR = Q3 - Q1
+        lower = Q1 - 1.5 * IQR
+        upper = Q3 + 1.5 * IQR
+        upper_array = np.where(self.dataframe[col] >= upper)[0]
+        lower_array = np.where(self.dataframe[col] <= lower)[0]
+        print("Number of outliers in this feature is:", upper_array.shape[0] + lower_array.shape[0])
+        return upper_array, lower_array
+
+    #--------------------------------------- Visualize Outliers ^_^---------------------------------------
+    
+    def visualize_outlier(self):
+        """
+        Visualize outliers in numerical features using box plots.
+        """
+        plt.figure(figsize=(50, 20))
+        num_data = self.dataframe.select_dtypes(include=np.number)
+        num_data.plot(kind='box', subplots=True, sharey=False, figsize=(50, 20))
+        plt.subplots_adjust(wspace=1)
+        plt.show()
 
 
+    #--------------------------------------- Visualize Correlation ^_^---------------------------------------
+    
+    def visualize_correlation(self):
+        """
+        Visualize the correlation between numerical features using a heatmap.
+        """
+        plt.figure(figsize=(20, 20))
+        num_data = self.dataframe.select_dtypes(include=np.number)
+        sns.heatmap(num_data.corr(), annot=True)
+        plt.show()
+
+
+    #--------------------------------------- Detect Skewed Features ^_^---------------------------------------
+    
+    def detect_skewed_features(self):
+        """
+        Detect skewed features in the numerical columns.
+        """
+        num_data = self.dataframe.select_dtypes(include=np.number)
+        skewess = num_data.skew().sort_values(ascending=False)
+        skewness = pd.DataFrame({'skew': skewess})
+        return skewness
+ 
+    #--------------------------------------- Check Normality ^_^---------------------------------------
+    
+    def normality_test(self, col):
+        """
+        Perform a normality test on a numerical column and create Q-Q plots to visualize the distribution.
+        """
+        k2, p = stats.normaltest(self.dataframe[col])
+        alpha = 0.05
+        print("p = {:g}".format(p))
+        if p < alpha:
+            print("The null hypothesis can be rejected. The data doesn't follow a normal distribution")
+        else:
+            print("The null hypothesis cannot be rejected. The data is normally distributed")
+        fig = sm.qqplot(self.dataframe[col], line='45')
+        plt.show()
+
+    #--------------------------------------- Plot  ^_^---------------------------------------
+    
+    def normality_plot(self, col):
+        """
+        1. Draw a distribution plot with a fitted normal distribution curve.
+        2. Draw a Quantile-Quantile plot.
+        """
+        fig, axes = plt.subplots(1, 2, figsize=(10, 5))
+        sns.distplot(self.dataframe[col], fit=norm, ax=axes[0])
+        axes[0].set_title('Distribution Plot')
+        axes[1] = stats.probplot(self.dataframe[col], plot=plt)
+        plt.tight_layout()
+        plt.show()
+
+    #--------------------------------------- Hyposthesis test  ^_^---------------------------------------
+    
+    def Hyposthesis_test(self, df1, df2, name_col):
+        """
+        Perform a Pearson correlation coefficient test and plot the results.
+        """
+        corr_coef, p_value = stats.pearsonr(df1, df2)
+        print(f"Pearson correlation coefficient: {corr_coef:.4f}")
+        print(f"P-value: {p_value:.4f}")
+        if p_value < 0.05:
+            print(f"Reject null hypothesis. There is a correlation between {name_col} and loyalty score.")
+        else:
+            print(f"Fail to reject null hypothesis. There is no correlation between {name_col} and loyalty score.")
+        plt.scatter(df1, df2)
+        plt.title(f"Plot of loyalty score vs {name_col}")
+        plt.xlabel(name_col)
+        plt.ylabel("loyalty score")
+        plt.show()
